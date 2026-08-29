@@ -1,0 +1,230 @@
+import { describe, expect, it } from 'vitest';
+import {
+  buildSeries,
+  filterCityOptions,
+  filterRows,
+  getAvailablePeriods,
+  getQuickRange,
+  getSummaryRows,
+  getVisibleSeries,
+  NEW_BUILD_HOUSING,
+  normalizePeriodRange,
+  parseCsv,
+  type CsvRow,
+} from '../src/data';
+import { filterReducer } from '../src/filterState';
+
+const csv = '\ufeffperiod,house_type,size_band,city,metric,base,value\n'
+  + '2024-01,二手住宅,全部,北京,环比,上月=100,100\n'
+  + '2024-02,二手住宅,全部,北京,环比,上月=100,101\n'
+  + '2024-02,二手住宅,全部,"北京,核心",同比,上年同月=100,98\n'
+  + '2011-02,新建商品住宅,全部,北京,环比,上月=100,100\n'
+  + '2018-03,新建商品住宅,90m2及以下,北京,环比,上月=100,100\n'
+  + '2018-03,新建商品住宅,90-144m2,北京,环比,上月=100,100\n'
+  + '2018-03,新建商品住宅,144m2以上,北京,环比,上月=100,100\n'
+  + '2020-01,新建商品住宅,90m2及以下,北京,环比,上月=100,101\n'
+  + '2020-01,新建商品住宅,90-144m2,北京,环比,上月=100,101\n'
+  + '2020-01,新建商品住宅,144m2以上,北京,环比,上月=100,101\n'
+  + '2024-01,新建商品住宅,90m2及以下,北京,环比,上月=100,99\n'
+  + '2024-01,新建商品住宅,90-144m2,北京,环比,上月=100,100.5\n'
+  + '2024-01,新建商品住宅,144m2以上,北京,环比,上月=100,101\n';
+
+const summaryRows = [
+  { period: '2023-08', house_type: '二手住宅', size_band: '全部', city: '北京', metric: '环比', base: '上月=100', value: '100' },
+  { period: '2023-09', house_type: '二手住宅', size_band: '全部', city: '北京', metric: '环比', base: '上月=100', value: '101' },
+  { period: '2023-09', house_type: '二手住宅', size_band: '全部', city: '北京', metric: '同比', base: '上年同月=100', value: '98.5' },
+  { period: '2024-09', house_type: '二手住宅', size_band: '全部', city: '北京', metric: '环比', base: '上月=100', value: '99' },
+  { period: '2024-09', house_type: '二手住宅', size_band: '全部', city: '北京', metric: '同比', base: '上年同月=100', value: '96.5' },
+  { period: '2023-08', house_type: '新建商品住宅', size_band: '90m2及以下', city: '上海', metric: '环比', base: '上月=100', value: '100' },
+  { period: '2023-09', house_type: '新建商品住宅', size_band: '90m2及以下', city: '上海', metric: '环比', base: '上月=100', value: '102' },
+  { period: '2023-09', house_type: '新建商品住宅', size_band: '90m2及以下', city: '上海', metric: '同比', base: '上年同月=100', value: '101.2' },
+  { period: '2023-08', house_type: '新建商品住宅', size_band: '90-144m2', city: '上海', metric: '环比', base: '上月=100', value: '100' },
+  { period: '2023-09', house_type: '新建商品住宅', size_band: '90-144m2', city: '上海', metric: '环比', base: '上月=100', value: '101' },
+  { period: '2023-09', house_type: '新建商品住宅', size_band: '90-144m2', city: '上海', metric: '同比', base: '上年同月=100', value: '100.8' },
+  { period: '2023-08', house_type: '新建商品住宅', size_band: '144m2以上', city: '上海', metric: '环比', base: '上月=100', value: '100' },
+  { period: '2023-09', house_type: '新建商品住宅', size_band: '144m2以上', city: '上海', metric: '环比', base: '上月=100', value: '99' },
+  { period: '2023-09', house_type: '新建商品住宅', size_band: '144m2以上', city: '上海', metric: '同比', base: '上年同月=100', value: '99.8' },
+] as CsvRow[];
+
+describe('housing price data', () => {
+  it('parses BOM-prefixed CSV and quoted fields', () => {
+    const rows = parseCsv(csv);
+    expect(rows[0].period).toBe('2024-01');
+    expect(rows[2].city).toBe('北京,核心');
+    expect(rows).toHaveLength(13);
+  });
+
+  it('filters to monthly index rows for the selected housing type and cities', () => {
+    const rows = filterRows(parseCsv(csv), {
+      housingType: '二手住宅',
+      cities: ['北京'],
+    });
+    expect(rows.map((row) => row.period)).toEqual(['2024-01', '2024-02']);
+  });
+
+  it('normalizes first month to 100 and compounds monthly changes', () => {
+    const rows = filterRows(parseCsv(csv), {
+      housingType: '二手住宅',
+      cities: ['北京'],
+    });
+    const [series] = buildSeries(rows, { housingType: '二手住宅', cities: ['北京'] });
+    expect(series.points[0].value).toBe(100);
+    expect(series.points[1].value).toBe(101);
+  });
+
+  it('creates three size-band series for new-build housing', () => {
+    const series = getVisibleSeries(parseCsv(csv), {
+      housingType: '新建商品住宅',
+      selectedCities: ['北京'],
+    });
+    expect(series.map(({ sizeBand }) => sizeBand)).toEqual([
+      '90m2及以下', '90-144m2', '144m2以上',
+    ]);
+  });
+
+  it('uses inclusive date boundaries and re-normalizes the selected range', () => {
+    const series = getVisibleSeries(parseCsv(csv), {
+      housingType: '二手住宅',
+      selectedCities: ['北京'],
+      startPeriod: '2024-02',
+      endPeriod: '2024-02',
+    });
+    expect(series[0].points).toEqual([{ period: '2024-02', value: 100 }]);
+  });
+
+  it('returns sorted unique available periods and substring city matches', () => {
+    const rows = parseCsv(csv);
+    expect(getAvailablePeriods(rows)).toEqual(['2011-02', '2018-03', '2020-01', '2024-01', '2024-02']);
+    expect(getAvailablePeriods(rows, { housingType: NEW_BUILD_HOUSING, cities: ['北京'] })).toEqual([
+      '2018-03', '2020-01', '2024-01',
+    ]);
+    expect(filterCityOptions(['北京', '上海', '长沙'], '上')).toEqual(['上海']);
+    expect(filterCityOptions(['北京', '上海'], '  ')).toEqual(['北京', '上海']);
+  });
+
+  it('calculates quick ranges from natural months and snaps to available periods', () => {
+    expect(getQuickRange(['2020-01', '2020-02', '2020-05', '2021-01'], 12)).toEqual({
+      startPeriod: '2020-02',
+      endPeriod: '2021-01',
+    });
+    expect(getQuickRange(['2020-01', '2020-05', '2021-01'], 11)).toEqual({
+      startPeriod: '2020-05',
+      endPeriod: '2021-01',
+    });
+  });
+
+  it('normalizes a range to type-specific period boundaries', () => {
+    expect(normalizePeriodRange(
+      { startPeriod: '2017-01', endPeriod: '2020-05' },
+      ['2018-03', '2019-01', '2020-05'],
+    )).toEqual({ startPeriod: '2018-03', endPeriod: '2020-05' });
+    expect(normalizePeriodRange(
+      { startPeriod: '2017-01', endPeriod: '2018-01' },
+      ['2018-03', '2019-01'],
+    )).toEqual({ startPeriod: null, endPeriod: null });
+  });
+
+  it('builds one resale summary row with raw latest indices and compounded base growth', () => {
+    const result = getSummaryRows(summaryRows, {
+      housingType: '二手住宅',
+      selectedCities: ['北京'],
+      startPeriod: '2023-08',
+      endPeriod: '2024-09',
+    });
+    expect(result[0]).toMatchObject({
+      key: '北京__全部',
+      city: '北京',
+      sizeBand: '全部',
+      latestPeriod: '2024-09',
+      monthOverMonth: 99,
+      yearOverYear: 96.5,
+    });
+    expect(result[0].baseGrowth).toBeCloseTo(-0.01, 8);
+  });
+
+  it('builds one row for each new-build size band in selected city order', () => {
+    const result = getSummaryRows(summaryRows, {
+      housingType: '新建商品住宅',
+      selectedCities: ['上海'],
+      startPeriod: '2023-08',
+      endPeriod: '2023-09',
+    });
+    expect(result.map(({ key, sizeBand }) => [key, sizeBand])).toEqual([
+      ['上海__90m2及以下', '90m2及以下'],
+      ['上海__90-144m2', '90-144m2'],
+      ['上海__144m2以上', '144m2以上'],
+    ]);
+    expect(result.map(({ baseGrowth }) => baseGrowth)).toEqual([2, 1, -1]);
+  });
+
+  it('keeps the latest period inside inclusive bounds', () => {
+    const result = getSummaryRows(summaryRows, {
+      housingType: '二手住宅',
+      selectedCities: ['北京'],
+      startPeriod: '2023-08',
+      endPeriod: '2023-09',
+    });
+    expect(result[0].latestPeriod).toBe('2023-09');
+    expect(result[0].monthOverMonth).toBe(101);
+  });
+
+  it('returns null when the latest row has no same-month comparison', () => {
+    const result = getSummaryRows(summaryRows.filter((row) => row.metric !== '同比'), {
+      housingType: '二手住宅',
+      selectedCities: ['北京'],
+      startPeriod: '2023-08',
+      endPeriod: '2024-09',
+    });
+    expect(result[0].yearOverYear).toBeNull();
+  });
+});
+
+describe('filter state', () => {
+  it('adds and removes cities without changing existing order or creating duplicates', () => {
+    const initial = {
+      housingType: '二手住宅' as const,
+      selectedCities: ['北京', '上海'],
+      startPeriod: null,
+      endPeriod: null,
+    };
+    const added = filterReducer(initial, { type: 'city/toggled', city: '广州', checked: true });
+    expect(added.selectedCities).toEqual(['北京', '上海', '广州']);
+    expect(filterReducer(added, { type: 'city/toggled', city: '广州', checked: true })).toEqual(added);
+    expect(filterReducer(added, { type: 'city/toggled', city: '上海', checked: false }).selectedCities).toEqual(['北京', '广州']);
+  });
+
+  it('stores start and end period changes without changing selected cities', () => {
+    const initial = {
+      housingType: '二手住宅' as const,
+      selectedCities: ['北京'],
+      startPeriod: null,
+      endPeriod: null,
+    };
+    const withStart = filterReducer(initial, { type: 'period/set', boundary: 'start', period: '2020-01' });
+    const withEnd = filterReducer(withStart, { type: 'period/set', boundary: 'end', period: '2024-12' });
+    expect(withEnd).toEqual({
+      housingType: '二手住宅',
+      selectedCities: ['北京'],
+      startPeriod: '2020-01',
+      endPeriod: '2024-12',
+    });
+  });
+
+  it('updates housing type and normalized range in one action', () => {
+    const initial = {
+      housingType: '二手住宅' as const,
+      selectedCities: ['北京'],
+      startPeriod: null,
+      endPeriod: null,
+    };
+    expect(filterReducer(initial, {
+      type: 'housingType/set',
+      housingType: NEW_BUILD_HOUSING,
+      range: { startPeriod: '2018-03', endPeriod: null },
+    })).toMatchObject({
+      housingType: NEW_BUILD_HOUSING,
+      startPeriod: '2018-03',
+      endPeriod: null,
+    });
+  });
+});
