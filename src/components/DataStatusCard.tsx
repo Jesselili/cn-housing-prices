@@ -70,7 +70,6 @@ export function DataStatusCard({ status, loadState, rows = [] }: DataStatusCardP
     <section className="data-status-card" aria-labelledby="data-status-title">
       <div className="data-status-header">
         <div>
-          <span className="data-status-kicker">DATA STATUS</span>
           <h2 id="data-status-title">数据状态</h2>
         </div>
       </div>

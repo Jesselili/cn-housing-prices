@@ -95,7 +95,6 @@ export function CityComparisonMatrix({ rows, loadState }: CityComparisonMatrixPr
     <section className="city-matrix-module" aria-labelledby="city-matrix-title">
       <header className="city-matrix-header">
         <div className="city-matrix-title-copy">
-          <span className="city-matrix-kicker">70-CITY COMPARISON</span>
           <h2 id="city-matrix-title">70 城横向比较</h2>
           <p>{snapshot.period ? `最新数据：${snapshot.period} · 所有数值均为变化率` : '等待可用数据'}</p>
         </div>

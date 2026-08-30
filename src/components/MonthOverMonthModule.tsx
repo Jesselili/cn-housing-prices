@@ -118,7 +118,6 @@ export function MonthOverMonthModule({ rows, loadState }: MonthOverMonthModulePr
     <section className="mom-module" aria-labelledby="mom-module-title">
       <header className="mom-header">
         <div className="mom-title-copy">
-          <span className="mom-kicker">LATEST MONTHLY CHANGE</span>
           <h2 id="mom-module-title">{title}</h2>
         </div>
         <div className="mom-controls" aria-label="环比模块筛选">

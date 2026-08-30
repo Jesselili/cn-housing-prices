@@ -25,10 +25,11 @@
 - `MarketBreadthModule` owns its housing type, counts monthly rising/unchanged/falling cities across all available cities using raw latest-month `环比` rows, and owns its new-build size-band control; it is independent of the trend chart's housing type, city, and date filters.
 - The independent `MonthOverMonthModule` uses raw latest-month `环比` rows for all available cities, owns its housing/size controls, and is not affected by the trend chart's city/date filters.
 - The trend chart's housing type state controls only the trend chart, its summary table, and their date-range/status context.
-- The page-level `DashboardIntro` renders the title, data source description, and always-visible index-vs-price methodology note above the dashboards; it has no modal or popover behavior.
+- The page-level `DashboardIntro` renders only the independent page title; `HousingDataHeader` renders the 70-city title, subtitle, and always-visible index-vs-price methodology note inside the housing data domain.
 - `getHousingDataCoverage` derives the `DataStatusCard` data range and missing-month notes from qualifying CSV rows; the status card receives loaded rows from `App`.
-- The page groups the title, subtitle, housing methodology, data status, and all 70-city modules inside `housing-dashboard-module`; `LprModule` is a separate data-domain module and does not receive housing filters.
+- The page renders `DashboardIntro` outside `housing-dashboard-module`; that wrapper contains the 70-city title, subtitle, methodology, data status, and all 70-city modules, while `LprModule` remains a separate data-domain module and does not receive housing filters.
 - LPR parsing lives in `src/data.ts` as `parseLprCsv`; `LprModule` uses native SVG, displays 1-year and 5-year rates, and visually prioritizes the 5-year rate.
+- The LPR methodology note is rendered above the LPR chart, and its subtitle is derived from the effective CSV period in compact `YYYYMMDD—YYYYMMDD` form.
 
 ## Development
 

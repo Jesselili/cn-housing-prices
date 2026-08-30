@@ -4,6 +4,7 @@ import { CityComparisonMatrix } from './components/CityComparisonMatrix';
 import { DateRangeFilter } from './components/DateRangeFilter';
 import { DataStatusCard } from './components/DataStatusCard';
 import { DashboardIntro } from './components/DashboardIntro';
+import { HousingDataHeader } from './components/HousingDataHeader';
 import { HousingTypeToggle } from './components/HousingTypeToggle';
 import { MetricDisplayToggle } from './components/MetricDisplayToggle';
 import { MarketBreadthModule } from './components/MarketBreadthModule';
@@ -152,13 +153,13 @@ export default function App() {
 
   return (
     <main className="page-shell">
-      <section className="housing-dashboard-module" aria-labelledby="dashboard-title">
-        <DashboardIntro rows={rows} />
+      <DashboardIntro />
+      <section className="housing-dashboard-module" aria-labelledby="housing-data-title">
+        <HousingDataHeader />
         <DataStatusCard loadState={loadState} rows={rows} status={dataStatus} />
         <section className="trend-card" aria-labelledby="page-title">
           <header className="card-header">
             <div className="title-copy">
-              <p className="title-kicker">MONTHLY HOUSING INDEX</p>
               <h1 id="page-title">房价趋势</h1>
               <p className="dataset-summary">
                 {loadState === 'ready' ? `${rows.length.toLocaleString('zh-CN')} 条月度记录 · 首月归一为 100` : '正在读取国家统计局 70 城数据…'}

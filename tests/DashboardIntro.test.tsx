@@ -1,25 +1,24 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { DashboardIntro } from '../src/components/DashboardIntro';
-import { parseCsv } from '../src/data';
-
-const updatedCsv = '\ufeffperiod,house_type,size_band,city,metric,base,value\n'
-  + '2025-01,二手住宅,全部,北京,环比,上月=100,100\n'
-  + '2025-01,二手住宅,全部,上海,环比,上月=100,100\n'
-  + '2025-03,二手住宅,全部,北京,环比,上月=100,100\n'
-  + '2025-03,二手住宅,全部,上海,环比,上月=100,100\n'
-  + '2025-01,新建商品住宅,90m2及以下,北京,环比,上月=100,100\n'
-  + '2025-01,新建商品住宅,90-144m2,北京,环比,上月=100,100\n'
-  + '2025-01,新建商品住宅,144m2以上,北京,环比,上月=100,100\n'
-  + '2025-02,新建商品住宅,90m2及以下,北京,环比,上月=100,100\n'
-  + '2025-02,新建商品住宅,90-144m2,北京,环比,上月=100,100\n'
-  + '2025-02,新建商品住宅,144m2以上,北京,环比,上月=100,100\n';
+import { HousingDataHeader } from '../src/components/HousingDataHeader';
 
 describe('DashboardIntro', () => {
-  it('renders the title, description, and visible methodology explanation', () => {
-    const markup = renderToStaticMarkup(<DashboardIntro rows={[]} />);
+  it('renders the independent page title without the 70-city subtitle', () => {
+    const markup = renderToStaticMarkup(<DashboardIntro />);
 
-    expect(markup).toContain('中国房产价格指数趋势');
+    expect(markup).toContain('中国房产趋势');
+    expect(markup).not.toContain('中国房产价格指数趋势');
+    expect(markup).not.toContain('70 城价格指数趋势');
+    expect(markup).not.toContain('基于国家统计局公开的 70 城住宅价格指数构建看板');
+    expect(markup).not.toContain('价格指数 ≠ 房价');
+    expect(markup).not.toContain('<section');
+  });
+
+  it('renders the 70-city title, subtitle, and methodology inside its data domain', () => {
+    const markup = renderToStaticMarkup(<HousingDataHeader />);
+
+    expect(markup).toContain('70 城价格指数趋势');
     expect(markup).toContain('基于国家统计局公开的 70 城住宅价格指数构建看板');
     expect(markup).toContain('价格指数 ≠ 房价');
     expect(markup).toContain('原始环比指数');
@@ -34,7 +33,7 @@ describe('DashboardIntro', () => {
   });
 
   it('keeps loaded data coverage details out of the intro module', () => {
-    const markup = renderToStaticMarkup(<DashboardIntro rows={parseCsv(updatedCsv)} />);
+    const markup = renderToStaticMarkup(<HousingDataHeader />);
 
     expect(markup).not.toContain('二手住宅：2025-01—2025-03');
     expect(markup).not.toContain('新建住宅：2025-01—2025-02');

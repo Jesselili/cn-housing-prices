@@ -144,7 +144,6 @@ export function MarketBreadthModule({ rows, loadState }: MarketBreadthModuleProp
     <section className="market-breadth-module" aria-labelledby="market-breadth-title">
       <header className="market-breadth-header">
         <div className="market-breadth-title-copy">
-          <span className="market-breadth-kicker">MARKET BREADTH</span>
           <h2 id="market-breadth-title">市场广度趋势</h2>
           <p>{snapshot.latestPeriod ? `最新数据：${snapshot.latestPeriod} · 按每月有数据城市统计` : '等待可用数据'}</p>
         </div>
