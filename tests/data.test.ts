@@ -3,7 +3,9 @@ import {
   buildSeries,
   filterCityOptions,
   filterRows,
+  getHousingDataCoverage,
   getAvailablePeriods,
+  getLatestMonthOverMonthSnapshot,
   getQuickRange,
   getSummaryRows,
   getVisibleSeries,
@@ -44,6 +46,20 @@ const summaryRows = [
   { period: '2023-08', house_type: '新建商品住宅', size_band: '144m2以上', city: '上海', metric: '环比', base: '上月=100', value: '100' },
   { period: '2023-09', house_type: '新建商品住宅', size_band: '144m2以上', city: '上海', metric: '环比', base: '上月=100', value: '99' },
   { period: '2023-09', house_type: '新建商品住宅', size_band: '144m2以上', city: '上海', metric: '同比', base: '上年同月=100', value: '99.8' },
+] as CsvRow[];
+
+const monthOverMonthRows = [
+  { period: '2026-06', house_type: '二手住宅', size_band: '全部', city: '北京', metric: '环比', base: '上月=100', value: '99.8' },
+  { period: '2026-07', house_type: '二手住宅', size_band: '全部', city: '广州', metric: '环比', base: '上月=100', value: '100.4' },
+  { period: '2026-07', house_type: '二手住宅', size_band: '全部', city: '北京', metric: '环比', base: '上月=100', value: '99.7' },
+  { period: '2026-07', house_type: '二手住宅', size_band: '全部', city: '上海', metric: '环比', base: '上月=100', value: '99.7' },
+  { period: '2026-07', house_type: '二手住宅', size_band: '全部', city: '天津', metric: '环比', base: '上月=100', value: '99.0' },
+  { period: '2026-07', house_type: '二手住宅', size_band: '全部', city: '广州', metric: '同比', base: '上年同月=100', value: '115' },
+  { period: '2026-07', house_type: '二手住宅', size_band: '全部', city: '深圳', metric: '环比', base: '上年同月=100', value: '103' },
+  { period: '2026-07', house_type: '二手住宅', size_band: '全部', city: '长沙', metric: '环比', base: '上月=100', value: '' },
+  { period: '2026-07', house_type: '新建商品住宅', size_band: '90m2及以下', city: '北京', metric: '环比', base: '上月=100', value: '101.2' },
+  { period: '2026-07', house_type: '新建商品住宅', size_band: '90-144m2', city: '北京', metric: '环比', base: '上月=100', value: '102.3' },
+  { period: '2026-07', house_type: '新建商品住宅', size_band: '144m2以上', city: '北京', metric: '环比', base: '上月=100', value: '103.4' },
 ] as CsvRow[];
 
 describe('housing price data', () => {
@@ -100,6 +116,33 @@ describe('housing price data', () => {
     ]);
     expect(filterCityOptions(['北京', '上海', '长沙'], '上')).toEqual(['上海']);
     expect(filterCityOptions(['北京', '上海'], '  ')).toEqual(['北京', '上海']);
+  });
+
+  it('calculates type-specific ranges and separates whole-month from city-level gaps', () => {
+    const rows = [
+      { period: '2025-01', house_type: '二手住宅', size_band: '全部', city: '北京', metric: '环比', base: '上月=100', value: '100' },
+      { period: '2025-01', house_type: '二手住宅', size_band: '全部', city: '上海', metric: '环比', base: '上月=100', value: '100' },
+      { period: '2025-02', house_type: '二手住宅', size_band: '全部', city: '北京', metric: '环比', base: '上月=100', value: '100' },
+      { period: '2025-03', house_type: '二手住宅', size_band: '全部', city: '北京', metric: '环比', base: '上月=100', value: '100' },
+      { period: '2025-03', house_type: '二手住宅', size_band: '全部', city: '上海', metric: '环比', base: '上月=100', value: '100' },
+      ...['90m2及以下', '90-144m2', '144m2以上'].flatMap((size_band) => [
+        { period: '2025-01', house_type: '新建商品住宅', size_band, city: '北京', metric: '环比', base: '上月=100', value: '100' },
+        { period: '2025-03', house_type: '新建商品住宅', size_band, city: '北京', metric: '环比', base: '上月=100', value: '100' },
+      ]),
+    ] as CsvRow[];
+
+    expect(getHousingDataCoverage(rows, '二手住宅')).toMatchObject({
+      startPeriod: '2025-01',
+      endPeriod: '2025-03',
+      missingPeriods: [],
+      cityMissingPeriods: [{ city: '上海', periods: ['2025-02'] }],
+    });
+    expect(getHousingDataCoverage(rows, NEW_BUILD_HOUSING)).toMatchObject({
+      startPeriod: '2025-01',
+      endPeriod: '2025-03',
+      missingPeriods: ['2025-02'],
+      cityMissingPeriods: [],
+    });
   });
 
   it('calculates quick ranges from natural months and snaps to available periods', () => {
@@ -176,6 +219,37 @@ describe('housing price data', () => {
       endPeriod: '2024-09',
     });
     expect(result[0].yearOverYear).toBeNull();
+  });
+
+  it('builds a latest-month resale snapshot from valid monthly rows only', () => {
+    const result = getLatestMonthOverMonthSnapshot(monthOverMonthRows, {
+      housingType: '二手住宅',
+    });
+    expect(result.period).toBe('2026-07');
+    expect(result.points.map(({ city, indexValue, change }) => [city, indexValue, change])).toEqual([
+      ['广州', 100.4, 0.4000000000000057],
+      ['北京', 99.7, -0.29999999999999716],
+      ['上海', 99.7, -0.29999999999999716],
+      ['天津', 99, -1],
+    ]);
+    expect(result.overview).toMatchObject({
+      coverageCities: 4,
+      rising: 1,
+      unchanged: 0,
+      falling: 3,
+      min: -1,
+      max: 0.4000000000000057,
+    });
+    expect(result.overview.mean).toBeCloseTo(-0.3, 8);
+  });
+
+  it('uses the requested new-build size band', () => {
+    const result = getLatestMonthOverMonthSnapshot(monthOverMonthRows, {
+      housingType: NEW_BUILD_HOUSING,
+      sizeBand: '90-144m2',
+    });
+    expect(result.points).toEqual([{ city: '北京', indexValue: 102.3, change: 2.299999999999997 }]);
+    expect(result.overview.rising).toBe(1);
   });
 });
 

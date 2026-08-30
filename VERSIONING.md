@@ -24,6 +24,31 @@ npm test
 npm run build
 ```
 
+## 每次编码操作的标准流程
+
+每次开始编码前先从最新 `main` 创建工作分支：
+
+```bash
+git switch main
+git pull --ff-only origin main
+git switch -c feature/<名称>
+```
+
+完成一个完整的小变化后立即提交，不要把多个无关功能长期堆在工作区：
+
+```bash
+npm test
+npm run build
+git status --short
+git add <相关文件>
+git commit -m "feat: describe the change"
+git push -u origin feature/<名称>
+```
+
+确认验证通过后再合并到 `main`。如果直接在 `main` 上完成了小型修复，也必须在本地验证后提交并推送，不能依赖未提交工作区作为版本记录。
+
+每个提交都是可定位的恢复点；标签只用于重要的可交付版本，不要求每个小提交都创建标签。
+
 ## 版本标签
 
 重要的可交付版本在 `main` 上创建标签，采用语义化版本格式：

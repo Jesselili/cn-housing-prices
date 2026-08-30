@@ -20,6 +20,9 @@
 - `DateRangeFilter` is a custom popover with quick ranges and two month sliders; it derives its available period bounds from the active housing type and selected cities, so new-build size-band data starts at 2018-03 in the UI.
 - The trend chart uses native SVG; do not add a chart library for this MVP.
 - The summary table is rendered below the trend chart and follows the active housing type, selected cities, and date range.
+- The independent `MonthOverMonthModule` uses raw latest-month `环比` rows for all available cities, owns its housing/size controls, and is not affected by the trend chart's city/date filters.
+- The page-level `DashboardIntro` renders the title, data source description, and always-visible index-vs-price methodology note above the dashboards; it has no modal or popover behavior.
+- `getHousingDataCoverage` derives the `DashboardIntro` data range and missing-month notes from qualifying CSV rows; the intro receives loaded rows from `App`.
 
 ## Development
 

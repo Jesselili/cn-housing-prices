@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useReducer, useState } from 'react';
 import { CityPicker } from './components/CityPicker';
 import { DateRangeFilter } from './components/DateRangeFilter';
+import { DashboardIntro } from './components/DashboardIntro';
 import { HousingTypeToggle } from './components/HousingTypeToggle';
+import { MonthOverMonthModule } from './components/MonthOverMonthModule';
 import { SummaryTable } from './components/SummaryTable';
 import { TrendChart } from './components/TrendChart';
 import {
@@ -108,6 +110,7 @@ export default function App() {
 
   return (
     <main className="page-shell">
+      <DashboardIntro rows={rows} />
       <section className="trend-card" aria-labelledby="page-title">
         <header className="card-header">
           <div className="title-copy">
@@ -160,6 +163,7 @@ export default function App() {
           <span>数据范围随 CSV 更新</span>
         </footer>
       </section>
+      <MonthOverMonthModule loadState={loadState} rows={rows} />
     </main>
   );
 }

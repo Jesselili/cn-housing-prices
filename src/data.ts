@@ -49,6 +49,40 @@ export interface PeriodSelection {
   endPeriod: string | null;
 }
 
+export interface HousingDataCoverage {
+  startPeriod: string | null;
+  endPeriod: string | null;
+  missingPeriods: string[];
+  cityMissingPeriods: Array<{ city: string; periods: string[] }>;
+}
+
+export interface MonthOverMonthPoint {
+  city: string;
+  indexValue: number;
+  change: number;
+}
+
+export interface MonthOverMonthOverview {
+  coverageCities: number;
+  rising: number;
+  unchanged: number;
+  falling: number;
+  mean: number | null;
+  min: number | null;
+  max: number | null;
+}
+
+export interface MonthOverMonthSnapshot {
+  period: string | null;
+  points: MonthOverMonthPoint[];
+  overview: MonthOverMonthOverview;
+}
+
+export interface MonthOverMonthOptions {
+  housingType: HousingType;
+  sizeBand?: SizeBand;
+}
+
 export const RESALE_HOUSING: HousingType = '二手住宅';
 export const NEW_BUILD_HOUSING: HousingType = '新建商品住宅';
 
@@ -267,6 +301,75 @@ export function getSummaryRows(rows: CsvRow[], {
   return summary;
 }
 
+function emptyMonthOverMonthSnapshot(): MonthOverMonthSnapshot {
+  return {
+    period: null,
+    points: [],
+    overview: {
+      coverageCities: 0,
+      rising: 0,
+      unchanged: 0,
+      falling: 0,
+      mean: null,
+      min: null,
+      max: null,
+    },
+  };
+}
+
+export function getLatestMonthOverMonthSnapshot(
+  rows: CsvRow[],
+  { housingType, sizeBand }: MonthOverMonthOptions,
+): MonthOverMonthSnapshot {
+  const selectedSizeBand = housingType === NEW_BUILD_HOUSING
+    ? (sizeBand && NEW_BUILD_SIZE_BANDS.includes(sizeBand) ? sizeBand : NEW_BUILD_SIZE_BANDS[0])
+    : '全部';
+  const monthlyRows = rows
+    .filter((row) => (
+      row.house_type === housingType
+      && row.size_band === selectedSizeBand
+      && row.metric === '环比'
+      && row.base === '上月=100'
+      && numericValue(row.value) !== null
+    ));
+  const latestPeriod = monthlyRows.reduce<string | null>(
+    (latest, row) => latest === null || row.period > latest ? row.period : latest,
+    null,
+  );
+  if (!latestPeriod) return emptyMonthOverMonthSnapshot();
+
+  const cityValues = new Map<string, number>();
+  monthlyRows
+    .filter((row) => row.period === latestPeriod)
+    .forEach((row) => {
+      const value = numericValue(row.value);
+      if (value !== null && !cityValues.has(row.city)) cityValues.set(row.city, value);
+    });
+  const points = [...cityValues.entries()]
+    .map(([city, indexValue]) => ({ city, indexValue, change: indexValue - 100 }))
+    .sort((left, right) => right.change - left.change || left.city.localeCompare(right.city, 'zh-CN'));
+  if (!points.length) return emptyMonthOverMonthSnapshot();
+
+  const changes = points.map(({ change }) => change);
+  const rising = changes.filter((change) => change > 0).length;
+  const unchanged = changes.filter((change) => change === 0).length;
+  const falling = changes.filter((change) => change < 0).length;
+  const total = changes.reduce((sum, change) => sum + change, 0);
+  return {
+    period: latestPeriod,
+    points,
+    overview: {
+      coverageCities: points.length,
+      rising,
+      unchanged,
+      falling,
+      mean: total / changes.length,
+      min: Math.min(...changes),
+      max: Math.max(...changes),
+    },
+  };
+}
+
 export function getPeriods(series: TrendSeries[]): string[] {
   return [...new Set(
     series.flatMap(({ points }) => points.map(({ period }) => period)),
@@ -292,6 +395,63 @@ export function getAvailablePeriods(
     ))
     .map((row) => row.period);
   return [...new Set(periods)].sort();
+}
+
+function coverageRows(rows: CsvRow[], housingType: HousingType): CsvRow[] {
+  const sizeBands = new Set(sizeBandsFor(housingType));
+  return rows.filter((row) => (
+    row.house_type === housingType
+    && row.metric === '环比'
+    && row.base === '上月=100'
+    && sizeBands.has(row.size_band as SizeBand)
+    && Boolean(row.period)
+  ));
+}
+
+function continuousPeriods(startPeriod: string, endPeriod: string): string[] {
+  const startIndex = periodToMonthIndex(startPeriod);
+  const endIndex = periodToMonthIndex(endPeriod);
+  if (startIndex === null || endIndex === null || startIndex > endIndex) return [];
+  return Array.from(
+    { length: endIndex - startIndex + 1 },
+    (_, offset) => monthIndexToPeriod(startIndex + offset),
+  );
+}
+
+export function getHousingDataCoverage(rows: CsvRow[], housingType: HousingType): HousingDataCoverage {
+  const matchingRows = coverageRows(rows, housingType);
+  const periods = validSortedPeriods(matchingRows.map((row) => row.period));
+  if (!periods.length) {
+    return {
+      startPeriod: null,
+      endPeriod: null,
+      missingPeriods: [],
+      cityMissingPeriods: [],
+    };
+  }
+
+  const periodSet = new Set(periods);
+  const expectedPeriods = continuousPeriods(periods[0], periods.at(-1)!);
+  const missingPeriods = expectedPeriods.filter((period) => !periodSet.has(period));
+  const cityPeriods = new Map<string, Set<string>>();
+  matchingRows.forEach((row) => {
+    if (!cityPeriods.has(row.city)) cityPeriods.set(row.city, new Set());
+    cityPeriods.get(row.city)!.add(row.period);
+  });
+  const cityMissingPeriods = [...cityPeriods.entries()]
+    .map(([city, cityPeriodSet]) => ({
+      city,
+      periods: periods.filter((period) => !missingPeriods.includes(period) && !cityPeriodSet.has(period)),
+    }))
+    .filter(({ periods: missingCityPeriods }) => missingCityPeriods.length > 0)
+    .sort((left, right) => left.city.localeCompare(right.city, 'zh-CN'));
+
+  return {
+    startPeriod: periods[0],
+    endPeriod: periods.at(-1)!,
+    missingPeriods,
+    cityMissingPeriods,
+  };
 }
 
 function periodToMonthIndex(period: string): number | null {
