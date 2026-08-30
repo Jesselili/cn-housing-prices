@@ -25,22 +25,21 @@ describe('DashboardIntro', () => {
     expect(markup).toContain('原始环比指数');
     expect(markup).toContain('趋势图累计指数');
     expect(markup).toContain('96.7');
-    expect(markup).toContain('数据范围');
-    expect(markup).toContain('等待 CSV 数据');
     expect(markup).not.toContain('2011-02—2026-07');
     expect(markup).not.toContain('2018-03—2026-07');
-    expect(markup).toContain('整月缺失');
-    expect(markup).toContain('看板不补值');
+    expect(markup).not.toContain('数据范围');
+    expect(markup).not.toContain('整月缺失');
+    expect(markup).not.toContain('看板不补值');
     expect(markup).not.toContain('<button');
   });
 
-  it('derives coverage and missing-month copy from the loaded CSV rows', () => {
+  it('keeps loaded data coverage details out of the intro module', () => {
     const markup = renderToStaticMarkup(<DashboardIntro rows={parseCsv(updatedCsv)} />);
 
-    expect(markup).toContain('二手住宅：2025-01—2025-03');
-    expect(markup).toContain('新建住宅：2025-01—2025-02');
-    expect(markup).toContain('二手住宅有 1 个月整月无数据（2025-02）');
-    expect(markup).toContain('没有发现城市级缺失');
+    expect(markup).not.toContain('二手住宅：2025-01—2025-03');
+    expect(markup).not.toContain('新建住宅：2025-01—2025-02');
+    expect(markup).not.toContain('二手住宅有 1 个月整月无数据（2025-02）');
+    expect(markup).not.toContain('没有发现城市级缺失');
     expect(markup).not.toContain('2026-07');
   });
 });

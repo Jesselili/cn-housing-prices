@@ -15,8 +15,8 @@ const rows: CsvRow[] = [
 describe('MarketBreadthModule', () => {
   it('fills available width for sparse data and keeps a readable minimum for dense data', () => {
     expect(getMarketBreadthChartWidth(6, 1600)).toBe(1600);
-    expect(getMarketBreadthChartWidth(70, 900)).toBe(1120);
-    expect(getMarketBreadthChartWidth(1, 0)).toBe(1120);
+    expect(getMarketBreadthChartWidth(70, 900)).toBe(900);
+    expect(getMarketBreadthChartWidth(1, 0)).toBe(83);
   });
 
   it('renders the three market-breadth categories and latest month', () => {

@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { getResponsiveChartWidth } from '../chartSizing';
 import {
   getMarketBreadthSnapshot,
   NEW_BUILD_HOUSING,
@@ -40,6 +41,8 @@ const SIZE_BAND_LABELS: Record<string, string> = {
   '144m2以上': '144m²以上',
 };
 
+const CHART_HORIZONTAL_PADDING = 44;
+
 function tickIndices(length: number): number[] {
   if (length <= 1) return [0];
   const step = Math.max(1, Math.ceil(length / 10));
@@ -63,8 +66,7 @@ function chartTickValues(max: number): number[] {
 }
 
 export function getMarketBreadthChartWidth(pointCount: number, availableWidth: number): number {
-  const dataWidth = 74 + pointCount * 9;
-  return Math.max(1120, dataWidth, availableWidth);
+  return getResponsiveChartWidth(pointCount, availableWidth, 9, 74);
 }
 
 function segmentY(point: MarketBreadthPoint, key: 'rising' | 'unchanged' | 'falling', yScale: (value: number) => number): number {
@@ -79,13 +81,30 @@ export function MarketBreadthModule({ rows, loadState }: MarketBreadthModuleProp
   const [housingType, setHousingType] = useState<HousingType>(RESALE_HOUSING);
   const [sizeBand, setSizeBand] = useState<SizeBand>(NEW_BUILD_SIZE_BANDS[0]);
   const [hover, setHover] = useState<{ index: number; x: number } | null>(null);
+  const chartScrollRef = useRef<HTMLDivElement>(null);
+  const [availableChartWidth, setAvailableChartWidth] = useState(0);
+  useEffect(() => {
+    const node = chartScrollRef.current;
+    if (!node) return undefined;
+    const updateWidth = () => {
+      setAvailableChartWidth(Math.max(0, node.clientWidth - CHART_HORIZONTAL_PADDING));
+    };
+    updateWidth();
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(updateWidth);
+      observer.observe(node);
+      return () => observer.disconnect();
+    }
+    window.addEventListener('resize', updateWidth);
+    return () => window.removeEventListener('resize', updateWidth);
+  }, [loadState, rows.length, housingType, sizeBand]);
   const snapshot = useMemo(
     () => getMarketBreadthSnapshot(rows, { housingType, sizeBand }),
     [rows, housingType, sizeBand],
   );
   const chart = useMemo<ChartDimensions | null>(() => {
     if (!snapshot.points.length) return null;
-    const width = getMarketBreadthChartWidth(snapshot.points.length, 0);
+    const width = getMarketBreadthChartWidth(snapshot.points.length, availableChartWidth);
     const height = 420;
     const margin = { top: 26, right: 26, bottom: 76, left: 54 };
     const plotWidth = width - margin.left - margin.right;
@@ -103,7 +122,7 @@ export function MarketBreadthModule({ rows, loadState }: MarketBreadthModuleProp
       barWidth: Math.min(14, Math.max(4, slotWidth * 0.72)),
       yScale,
     };
-  }, [snapshot.points]);
+  }, [snapshot.points, availableChartWidth]);
   const xTicks = useMemo(() => tickIndices(snapshot.points.length), [snapshot.points.length]);
   const latestPoint = snapshot.points.at(-1) ?? null;
   const tooltipLeft = hover && chart ? Math.min(Math.max(hover.x + 14, 10), chart.width - 224) : 0;
@@ -186,7 +205,7 @@ export function MarketBreadthModule({ rows, loadState }: MarketBreadthModuleProp
               </span>
             ))}
           </div>
-          <div className="market-breadth-chart-scroll">
+          <div className="market-breadth-chart-scroll" ref={chartScrollRef}>
             <div className="market-breadth-chart" style={{ width: chart.width }}>
               <svg
                 className="market-breadth-svg"

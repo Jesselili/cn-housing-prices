@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { HousingType, TrendSeries } from '../data';
+import { getResponsiveChartWidth } from '../chartSizing';
+import { formatDisplayValue, type HousingType, type MetricDisplayMode, type TrendSeries } from '../data';
 
 interface TrendChartProps {
   series: TrendSeries[];
   periods: string[];
   housingType: HousingType;
+  displayMode?: MetricDisplayMode;
 }
 
 interface Dimensions {
@@ -41,17 +43,19 @@ function getCityColor(city: string): string {
   return FALLBACK_COLORS[Math.abs(hash) % FALLBACK_COLORS.length];
 }
 
-function formatIndex(value: number | null): string {
-  return value === null || !Number.isFinite(value) ? '—' : value.toFixed(2);
-}
-
 function seriesLabel(series: TrendSeries, housingType: HousingType): string {
   return housingType === '新建商品住宅'
     ? `${series.city} · ${SIZE_BAND_LABELS[series.sizeBand] ?? series.sizeBand}`
     : series.city;
 }
 
-function makePath(series: TrendSeries, periodIndex: Map<string, number>, xScale: (index: number) => number, yScale: (value: number) => number): string {
+function makePath(
+  series: TrendSeries,
+  periodIndex: Map<string, number>,
+  xScale: (index: number) => number,
+  yScale: (value: number) => number,
+  displayValue: (value: number) => number,
+): string {
   let path = '';
   let segmentOpen = false;
   series.points.forEach((point) => {
@@ -60,7 +64,7 @@ function makePath(series: TrendSeries, periodIndex: Map<string, number>, xScale:
       return;
     }
     const x = xScale(periodIndex.get(point.period)!);
-    const y = yScale(point.value);
+    const y = yScale(displayValue(point.value));
     path += `${segmentOpen ? 'L' : 'M'} ${x.toFixed(2)} ${y.toFixed(2)} `;
     segmentOpen = true;
   });
@@ -77,7 +81,12 @@ function tickIndices(length: number): number[] {
   ])];
 }
 
-export function TrendChart({ series, periods, housingType }: TrendChartProps) {
+function formatChartValue(value: number, displayMode: MetricDisplayMode): string {
+  if (displayMode === 'change') return `${value > 0 ? '+' : ''}${value.toFixed(2)}%`;
+  return value.toFixed(2);
+}
+
+export function TrendChart({ series, periods, housingType, displayMode = 'index' }: TrendChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const [viewportWidth, setViewportWidth] = useState(1024);
@@ -94,7 +103,7 @@ export function TrendChart({ series, periods, housingType }: TrendChartProps) {
   }, []);
 
   const dimensions = useMemo<Dimensions>(() => {
-    const width = Math.max(viewportWidth, 960);
+    const width = getResponsiveChartWidth(periods.length, viewportWidth, 42, 90);
     const height = Math.max(440, Math.min(590, Math.round(width * 0.4)));
     const margin = { top: 28, right: 28, bottom: 76, left: 62 };
     return {
@@ -104,11 +113,13 @@ export function TrendChart({ series, periods, housingType }: TrendChartProps) {
       plotWidth: width - margin.left - margin.right,
       plotHeight: height - margin.top - margin.bottom,
     };
-  }, [viewportWidth]);
+  }, [periods.length, viewportWidth]);
 
   const numericValues = useMemo(
-    () => series.flatMap((item) => item.points.map((point) => point.value)).filter((value): value is number => Number.isFinite(value)),
-    [series],
+    () => series
+      .flatMap((item) => item.points.map((point) => point.value === null ? null : (displayMode === 'change' ? point.value - 100 : point.value)))
+      .filter((value): value is number => Number.isFinite(value)),
+    [series, displayMode],
   );
   const periodIndex = useMemo(() => new Map(periods.map((period, index) => [period, index])), [periods]);
 
@@ -123,8 +134,8 @@ export function TrendChart({ series, periods, housingType }: TrendChartProps) {
   }
 
   const { width, height, margin, plotWidth, plotHeight } = dimensions;
-  const rawMin = Math.min(...numericValues);
-  const rawMax = Math.max(...numericValues);
+  const rawMin = Math.min(...numericValues, ...(displayMode === 'change' ? [0] : []));
+  const rawMax = Math.max(...numericValues, ...(displayMode === 'change' ? [0] : []));
   const rawRange = rawMax - rawMin;
   const padding = rawRange === 0 ? Math.max(Math.abs(rawMax) * 0.03, 1) : rawRange * 0.05;
   const yMin = rawMin - padding;
@@ -161,19 +172,22 @@ export function TrendChart({ series, periods, housingType }: TrendChartProps) {
       </div>
       <div className="plot-wrap" style={{ width }}>
         <svg ref={svgRef} className="trend-svg" viewBox={`0 0 ${width} ${height}`} role="img" aria-labelledby="chart-title chart-description">
-          <title id="chart-title">{housingType}累计趋势</title>
-          <desc id="chart-description">月度环比指数连乘后的房价趋势，首月归一为 100。</desc>
+          <title id="chart-title">{`${housingType}${displayMode === 'change' ? '累计变化率' : '累计指数趋势'}`}</title>
+          <desc id="chart-description">{displayMode === 'change' ? '月度环比指数连乘后的累计变化率，所选区间首月为 0%。' : '月度环比指数连乘后的房价指数趋势，所选区间首月归一为 100。'}</desc>
           <g className="grid">
             {yTicks.map((value) => {
               const y = yScale(value);
               return (
                 <g key={value}>
                   <line className="grid-line" x1={margin.left} x2={width - margin.right} y1={y} y2={y} />
-                  <text className="y-label" x={margin.left - 12} y={y + 4} textAnchor="end">{formatIndex(value)}</text>
+                  <text className="y-label" x={margin.left - 12} y={y + 4} textAnchor="end">{formatChartValue(value, displayMode)}</text>
                 </g>
               );
             })}
           </g>
+          {displayMode === 'change' && (
+            <line className="change-reference-line" x1={margin.left} x2={width - margin.right} y1={yScale(0)} y2={yScale(0)} />
+          )}
           <line className="axis-line" x1={margin.left} x2={margin.left} y1={margin.top} y2={height - margin.bottom} />
           <g className="x-labels">
             {xTicks.map((index) => (
@@ -188,11 +202,13 @@ export function TrendChart({ series, periods, housingType }: TrendChartProps) {
               return (
                 <path
                   className="trend-line"
-                  d={makePath(item, periodIndex, xScale, yScale)}
+                  d={makePath(item, periodIndex, xScale, yScale, (value) => displayMode === 'change' ? value - 100 : value)}
                   key={item.key}
                   stroke={getCityColor(item.city)}
                   strokeDasharray={dash || undefined}
-                />
+                >
+                  <title>{`${seriesLabel(item, housingType)} ${formatDisplayValue([...item.points].reverse().find((point) => point.value !== null)?.value ?? null, displayMode)}`}</title>
+                </path>
               );
             })}
           </g>
@@ -203,7 +219,8 @@ export function TrendChart({ series, periods, housingType }: TrendChartProps) {
                 {series.map((item) => {
                   const point = item.points.find(({ period }) => period === periods[hover.index]);
                   if (!point || point.value === null) return null;
-                  return <circle className="active-dot" cx={xScale(hover.index)} cy={yScale(point.value)} fill={getCityColor(item.city)} key={item.key} r="4" />;
+                  const value = displayMode === 'change' ? point.value - 100 : point.value;
+                  return <circle className="active-dot" cx={xScale(hover.index)} cy={yScale(value)} fill={getCityColor(item.city)} key={item.key} r="4" />;
                 })}
               </g>
             </>
@@ -227,7 +244,7 @@ export function TrendChart({ series, periods, housingType }: TrendChartProps) {
                 <div className="tooltip-row" key={item.key}>
                   <span className="tooltip-swatch" style={{ backgroundColor: getCityColor(item.city) }} />
                   <span className="tooltip-label">{seriesLabel(item, housingType)}</span>
-                  <strong>{formatIndex(point?.value ?? null)}</strong>
+                  <strong>{formatDisplayValue(point?.value ?? null, displayMode)}</strong>
                 </div>
               );
             })}

@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { getResponsiveChartWidth } from '../chartSizing';
 import {
   getLatestMonthOverMonthSnapshot,
   NEW_BUILD_HOUSING,
@@ -58,6 +59,23 @@ function chartTickValues(min: number, max: number): number[] {
 export function MonthOverMonthModule({ rows, loadState }: MonthOverMonthModuleProps) {
   const [housingType, setHousingType] = useState<HousingType>(RESALE_HOUSING);
   const [sizeBand, setSizeBand] = useState<SizeBand>(NEW_BUILD_SIZE_BANDS[0]);
+  const chartScrollRef = useRef<HTMLDivElement>(null);
+  const [availableChartWidth, setAvailableChartWidth] = useState(0);
+  useEffect(() => {
+    const node = chartScrollRef.current;
+    if (!node) return undefined;
+    const updateWidth = () => {
+      setAvailableChartWidth(Math.max(0, node.clientWidth - 44));
+    };
+    updateWidth();
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(updateWidth);
+      observer.observe(node);
+      return () => observer.disconnect();
+    }
+    window.addEventListener('resize', updateWidth);
+    return () => window.removeEventListener('resize', updateWidth);
+  }, [loadState, rows.length, housingType, sizeBand]);
   const snapshot = useMemo(
     () => getLatestMonthOverMonthSnapshot(rows, { housingType, sizeBand }),
     [rows, housingType, sizeBand],
@@ -66,7 +84,7 @@ export function MonthOverMonthModule({ rows, loadState }: MonthOverMonthModulePr
 
   const chart = useMemo(() => {
     if (!snapshot.points.length) return null;
-    const width = Math.max(1180, 74 + snapshot.points.length * 42);
+    const width = getResponsiveChartWidth(snapshot.points.length, availableChartWidth, 42, 74);
     const height = 470;
     const margin = { top: 34, right: 24, bottom: 112, left: 54 };
     const plotWidth = width - margin.left - margin.right;
@@ -94,7 +112,7 @@ export function MonthOverMonthModule({ rows, loadState }: MonthOverMonthModulePr
       barWidth,
       ticks: chartTickValues(min, max),
     };
-  }, [snapshot.points]);
+  }, [snapshot.points, availableChartWidth]);
 
   return (
     <section className="mom-module" aria-labelledby="mom-module-title">
@@ -154,7 +172,7 @@ export function MonthOverMonthModule({ rows, loadState }: MonthOverMonthModulePr
           {!chart ? (
             <div className="mom-empty">当前住宅类型和户型没有可用的环比数据。</div>
           ) : (
-            <div className="mom-chart-scroll">
+            <div className="mom-chart-scroll" ref={chartScrollRef}>
               <svg
                 className="mom-svg"
                 width={chart.width}

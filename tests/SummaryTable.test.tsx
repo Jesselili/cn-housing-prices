@@ -38,4 +38,16 @@ describe('SummaryTable', () => {
     expect(markup).toContain('-10.19%');
     expect(markup).toContain('—');
   });
+
+  it('renders month-over-month and year-over-year values as changes in change mode', () => {
+    const markup = renderToStaticMarkup(
+      <SummaryTable displayMode="change" rows={rows} housingType="新建商品住宅" basePeriod="2023-08" />,
+    );
+
+    expect(markup).toContain('环比变化');
+    expect(markup).toContain('同比变化');
+    expect(markup).toContain('-0.60%');
+    expect(markup).toContain('-3.40%');
+    expect(markup).toContain('-10.19%');
+  });
 });
